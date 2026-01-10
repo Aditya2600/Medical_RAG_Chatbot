@@ -2,7 +2,7 @@
 
 Evidence-grounded medical Q and A over your own PDFs, built with a clean RAG pipeline and production-ready CI/CD hooks.
 
-## Why this stands out (HR-friendly)
+## Highlights
 - End-to-end delivery: ingestion, vector search, LLM inference, and a working web UI.
 - MLOps readiness: Dockerized app, Jenkins pipeline, Trivy scan, and AWS ECR/App Runner deployment flow.
 - Clear, auditable answers: retrieval-first flow with a tight prompt for concise responses.
