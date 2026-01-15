@@ -28,18 +28,18 @@
             {% for msg in messages %}
                 <div class="message {{ msg.role }}">
                     <strong>{{ msg.role|capitalize }}:</strong><br />
-                    {{ msg.content | safe | nl2br }}
+                    {{ msg.content | e | replace('\n', '<br>') | safe }}
                 </div>
             {% endfor %}
         </div>
 
-        <form method="post" action="{{ url_for('index') }}">
-            <textarea name="prompt" placeholder="Ask a medical question..." required></textarea>
+        <form method="post" action="{{ url_for('chat') }}">
+            <textarea name="question" placeholder="Ask a medical question..." required></textarea>
             <br />
             <button type="submit">Send</button>
         </form>
 
-        <form method="get" action="{{ url_for('clear') }}">
+        <form method="get" action="{{ url_for('clear_chat') }}">
             <button type="submit" class="clear-btn">Clear Chat</button>
         </form>
     </div>
