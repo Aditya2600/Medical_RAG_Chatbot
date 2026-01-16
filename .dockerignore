@@ -1,0 +1,24 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+.env
+.env.*
+
+.git/
+.gitignore
+
+.vscode/
+.idea/
+
+venv/
+.venv/
+
+# common data / artifacts
+vectorstore/
+data/
+
+# OS files
+.DS_Store
