@@ -1,12 +1,18 @@
 # Medical RAG Chatbot — LLMOps CI/CD (Jenkins + Trivy + AWS ECR + App Runner)
 
-Production-style **Retrieval-Augmented Generation (RAG)** chatbot for medical PDFs with an end-to-end **CI/CD** pipeline: Docker build → Trivy scan → ECR push → AWS App Runner deploy via Jenkins (DinD).
+Production-style **Retrieval-Augmented Generation (RAG)** chatbot for medical PDFs with an end-to-end **CI/CD** pipeline: Docker build -> Trivy scan -> ECR push -> AWS App Runner deploy via Jenkins (DinD).
+
+## Highlights
+- Grounded RAG workflow with FAISS retrieval over medical PDFs.
+- Containerized build with automated security scanning (Trivy).
+- Deployment to AWS App Runner driven by Jenkins DinD.
+- React UI backed by a Flask API.
 
 ## Demo
 
 ![Demo](assets/demo.gif)
 
-**Full demo video:** _add your link here_ (e.g., GitHub Release asset / YouTube / Drive)
+Full demo video: [Demo.mp4](Demo.mp4)
 
 ## Architecture & Flow
 
@@ -37,8 +43,6 @@ flowchart LR
   TV --> ECR[AWS ECR]
   ECR --> AR[AWS App Runner]
 ```
-
-> Optional: If you prefer a screenshot-style diagram, add `assets/architecture.png` and embed it here.
 
 ## Tech Stack
 
@@ -279,14 +283,6 @@ docker run --rm \
 docker exec -it jenkins-dind docker info
 docker exec -it jenkins-dind docker run --rm hello-world
 ```
-
-## Live Demo
-
-Add your App Runner service URL here.
-
-## License
-
-MIT (or your preferred license)
 
 ## Disclaimer
 
