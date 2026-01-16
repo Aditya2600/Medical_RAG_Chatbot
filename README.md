@@ -18,6 +18,31 @@ CI/CD pipeline:
 GitHub -> Jenkins (DinD) -> Docker build -> Trivy scan -> ECR -> App Runner deploy
 ```
 
+### Flowchart
+
+```mermaid
+flowchart LR
+  subgraph RAG[Retrieval-Augmented Generation (RAG)]
+    A[PDFs (data/)] --> B[Load PDFs]
+    B --> C[Chunk Documents]
+    C --> D[Generate Embeddings]
+    D --> E[Store in FAISS (vectorstore/db_faiss)]
+    Q[User Query] --> R[Retrieve Top-k Chunks]
+    E --> R
+    R --> P[Prompt: Question + Context]
+    P --> L[LLM]
+    L --> O[Final Answer]
+  end
+
+  subgraph CICD[CI/CD Pipeline]
+    G[GitHub] --> J[Jenkins Pipeline (DinD)]
+    J --> DB[Docker Build]
+    DB --> TV[Trivy Scan]
+    TV --> ECR[AWS ECR Push]
+    ECR --> AR[AWS App Runner Deploy]
+  end
+```
+
 ## Tech Stack
 - Backend: Python, Flask
 - RAG: LangChain + FAISS
