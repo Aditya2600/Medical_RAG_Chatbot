@@ -3,7 +3,10 @@
 Evidence-grounded medical Q and A over your own PDFs with a clean RAG pipeline,
 a production-friendly backend, and a modern chat UI.
 
-## Demo
+## Demo Preview
+![Clinical Chat UI Preview](ui.png)
+
+## Demo Video
 <video src="Demo.mp4" controls></video>
 If your viewer does not render the video, use this link: [Demo.mp4](Demo.mp4)
 
