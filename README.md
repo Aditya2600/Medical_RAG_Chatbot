@@ -22,20 +22,20 @@ GitHub -> Jenkins (DinD) -> Docker build -> Trivy scan -> ECR -> App Runner depl
 
 ```mermaid
 flowchart LR
-  subgraph RAG[Retrieval-Augmented Generation (RAG)]
-    A[PDFs (data/)] --> B[Load PDFs]
+  subgraph RAG[Retrieval Augmented Generation]
+    A[PDFs data] --> B[Load PDFs]
     B --> C[Chunk Documents]
     C --> D[Generate Embeddings]
-    D --> E[Store in FAISS (vectorstore/db_faiss)]
-    Q[User Query] --> R[Retrieve Top-k Chunks]
+    D --> E[Store in FAISS]
+    Q[User Query] --> R[Retrieve Top K Chunks]
     E --> R
-    R --> P[Prompt: Question + Context]
+    R --> P[Build Prompt with Context]
     P --> L[LLM]
     L --> O[Final Answer]
   end
 
-  subgraph CICD[CI/CD Pipeline]
-    G[GitHub] --> J[Jenkins Pipeline (DinD)]
+  subgraph CICD[CI CD Pipeline]
+    G[GitHub] --> J[Jenkins Pipeline DinD]
     J --> DB[Docker Build]
     DB --> TV[Trivy Scan]
     TV --> ECR[AWS ECR Push]
