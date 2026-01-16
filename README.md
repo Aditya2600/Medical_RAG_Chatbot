@@ -1,63 +1,62 @@
 # Medical RAG Chatbot — LLMOps CI/CD (Jenkins + Trivy + AWS ECR + App Runner)
 
-Production-style Retrieval-Augmented Generation (RAG) chatbot for medical PDFs with an end-to-end CI/CD pipeline: Docker build, Trivy scan, ECR push, and App Runner deploy via Jenkins DinD.
+Production-style **Retrieval-Augmented Generation (RAG)** chatbot for medical PDFs with an end-to-end **CI/CD** pipeline: Docker build → Trivy scan → ECR push → AWS App Runner deploy via Jenkins (DinD).
 
 ## Demo
+
 ![Demo](assets/demo.gif)
 
-Full demo video: add your link here.
+**Full demo video:** _add your link here_ (e.g., GitHub Release asset / YouTube / Drive)
 
-## Architecture
-RAG pipeline:
-```
-PDFs -> Chunk -> Embeddings -> FAISS -> Retrieval -> Prompt + Context + LLM -> Answer
-```
+## Architecture & Flow
 
-CI/CD pipeline:
-```
-GitHub -> Jenkins (DinD) -> Docker build -> Trivy scan -> ECR -> App Runner deploy
-```
-
-### Flowchart
+### RAG flow
 
 ```mermaid
 flowchart LR
-  subgraph RAG[Retrieval Augmented Generation]
-    A[PDFs data] --> B[Load PDFs]
-    B --> C[Chunk Documents]
-    C --> D[Generate Embeddings]
-    D --> E[Store in FAISS]
-    Q[User Query] --> R[Retrieve Top K Chunks]
-    E --> R
-    R --> P[Build Prompt with Context]
-    P --> L[LLM]
-    L --> O[Final Answer]
-  end
+  A[PDFs] --> B[Load]
+  B --> C[Chunk]
+  C --> D[Embeddings]
+  D --> E[(FAISS Index)]
 
-  subgraph CICD[CI CD Pipeline]
-    G[GitHub] --> J[Jenkins Pipeline DinD]
-    J --> DB[Docker Build]
-    DB --> TV[Trivy Scan]
-    TV --> ECR[AWS ECR Push]
-    ECR --> AR[AWS App Runner Deploy]
-  end
+  Q[User Query] --> R[Retrieve Top K]
+  E --> R
+
+  R --> P[Prompt + Context]
+  P --> L[LLM]
+  L --> O[Answer]
 ```
 
+### CI/CD flow
+
+```mermaid
+flowchart LR
+  GH[GitHub] --> JK[Jenkins DinD]
+  JK --> DB[Docker Build]
+  DB --> TV[Trivy Scan]
+  TV --> ECR[AWS ECR]
+  ECR --> AR[AWS App Runner]
+```
+
+> Optional: If you prefer a screenshot-style diagram, add `assets/architecture.png` and embed it here.
+
 ## Tech Stack
-- Backend: Python, Flask
-- RAG: LangChain + FAISS
-- Embeddings: SentenceTransformers
-- LLM: Hugging Face Inference Providers (configurable model)
-- Frontend: React + Tailwind
-- Security: Trivy
-- CI/CD: Jenkins Pipeline (DinD)
-- Registry: AWS ECR
-- Deployment: AWS App Runner
+
+- **Backend:** Python, Flask
+- **RAG:** LangChain + FAISS
+- **Embeddings:** SentenceTransformers
+- **LLM:** Hugging Face Inference Providers (configurable model)
+- **Frontend:** React + Tailwind
+- **Security:** Trivy
+- **CI/CD:** Jenkins Pipeline (True DinD)
+- **Registry:** AWS ECR
+- **Deployment:** AWS App Runner
 
 ## Repository Structure
+
 ```text
 .
-├── app/                      # application code
+├── app/                      # backend application code
 ├── data/                     # PDFs / knowledge base
 ├── vectorstore/db_faiss/     # FAISS index (generated)
 ├── src/                      # React frontend
@@ -70,12 +69,14 @@ flowchart LR
 ```
 
 ## Local Setup
+
 ```bash
 git clone https://github.com/data-guru0/LLMOPS-2-TESTING-MEDICAL.git
 cd LLMOPS-2-TESTING-MEDICAL
 ```
 
 Create venv + install:
+
 ```bash
 python -m venv venv
 source venv/bin/activate     # mac/linux
@@ -85,6 +86,7 @@ pip install -e .
 ```
 
 ### Backend
+
 ```bash
 export HF_TOKEN="your_huggingface_token"
 
@@ -94,26 +96,33 @@ python app/components/data_loader.py
 # Run the backend (defaults to 5001)
 python app/application.py
 ```
+
 Backend runs at `http://localhost:5001`.
 
 ### Frontend
+
 ```bash
 npm install
 ```
 
 Set `REACT_APP_API_URL` in `.env` (example in `.env.example`):
-```
+
+```env
 REACT_APP_API_URL=http://localhost:5001
 ```
 
 Start the UI:
+
 ```bash
 npm start
 ```
+
 Frontend runs at `http://localhost:3000`.
 
 ## Configuration
+
 Key environment variables:
+
 - `HF_TOKEN`: Hugging Face token (required)
 - `HUGGINGFACE_REPO_ID`: model id (default in `app/config/config.py`)
 - `HF_PROVIDER`: inference provider (default: `hf-inference`)
@@ -122,6 +131,7 @@ Key environment variables:
 - `REACT_APP_API_URL`: backend URL for the frontend
 
 ## Docker
+
 ```bash
 docker build -t medical-rag .
 
@@ -143,12 +153,14 @@ docker run --rm -p 5001:5001 \
 ## Jenkins Setup (True Docker-in-Docker)
 
 ### 1) Build Jenkins DinD image
+
 ```bash
 cd custom_jenkins
 docker build -t jenkins-dind .
 ```
 
 ### 2) Run Jenkins DinD container
+
 ```bash
 docker run -d \
   --name jenkins-dind \
@@ -161,6 +173,7 @@ docker run -d \
 ```
 
 ### 3) Get admin password
+
 ```bash
 docker exec -it jenkins-dind cat /var/jenkins_home/secrets/initialAdminPassword
 ```
@@ -170,6 +183,7 @@ Open Jenkins: `http://localhost:8080`.
 ## Install Tools in Jenkins Container (if missing)
 
 ### Install Trivy (ARM64-safe)
+
 ```bash
 docker exec -u root -it jenkins-dind bash
 apt-get update -y
@@ -182,6 +196,7 @@ exit
 ```
 
 ### Install AWS CLI (ARM64-safe)
+
 ```bash
 docker exec -u root -it jenkins-dind bash
 apt-get update -y
@@ -195,9 +210,10 @@ exit
 ```
 
 ## Jenkins + GitHub Integration
+
 1) Create a GitHub token (classic) with scopes: `repo`, `admin:repo_hook`
 2) Add to Jenkins Credentials:
-   - Jenkins -> Manage Jenkins -> Credentials -> (Global) -> Add Credentials
+   - Jenkins → Manage Jenkins → Credentials → (Global) → Add Credentials
    - Kind: Username with password
    - Username: your GitHub username
    - Password: GitHub token
@@ -206,17 +222,22 @@ exit
 ## AWS Setup (ECR + App Runner)
 
 ### IAM User permissions
+
 Attach these policies to your Jenkins IAM user:
+
 - `AmazonEC2ContainerRegistryFullAccess`
 - `AWSAppRunnerFullAccess`
 
 ### Add AWS creds to Jenkins
-- Jenkins -> Credentials -> Add
+
+- Jenkins → Credentials → Add
 - Kind: AWS Credentials
 - ID: `aws-token` (matches your Jenkinsfile)
 
 ## CI/CD Pipeline (Jenkinsfile)
+
 This repo contains a `Jenkinsfile` that performs:
+
 - Checkout source from GitHub
 - Docker build
 - Trivy scan (artifact: `trivy-report.json`)
@@ -226,10 +247,12 @@ This repo contains a `Jenkinsfile` that performs:
 See `Jenkinsfile` for the full pipeline definition.
 
 ## Security Notes
+
 - Trivy typically uses `--severity HIGH,CRITICAL`.
-- If your pipeline uses `|| true`, the build does not fail on findings.
+- If your pipeline uses `|| true`, the build does **not** fail on findings.
 
 To fail the pipeline on vulnerabilities:
+
 ```bash
 trivy image --severity HIGH,CRITICAL --exit-code 1 ...
 ```
@@ -237,7 +260,9 @@ trivy image --severity HIGH,CRITICAL --exit-code 1 ...
 ## Troubleshooting
 
 ### Jenkins container restart loop: volume permission issue
+
 Fix once:
+
 ```bash
 docker rm -f jenkins-dind
 
@@ -249,16 +274,20 @@ docker run --rm \
 ```
 
 ### Docker daemon not reachable inside Jenkins
+
 ```bash
 docker exec -it jenkins-dind docker info
 docker exec -it jenkins-dind docker run --rm hello-world
 ```
 
 ## Live Demo
+
 Add your App Runner service URL here.
 
 ## License
+
 MIT (or your preferred license)
 
 ## Disclaimer
+
 This project is for information retrieval and demo purposes only. It does not provide medical advice; consult a qualified professional for medical decisions.
