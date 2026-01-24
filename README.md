@@ -23,36 +23,39 @@ Full demo video: add link
 
 ```mermaid
 flowchart LR
-  U[User Question] --> API[Flask API]
-  API --> GR[Guardrails + Routing]
-  GR -->|pdf / hybrid| RET[Retriever (FAISS)]
-  RET --> CTX[Context Builder]
-  CTX --> LLM[LLM (HF Inference)]
-  LLM --> OUT[JSON Answer + Evidence + Disclaimer]
-  OUT --> API --> UI[React UI]
+  U["User Question"] --> API["Flask API"];
+  API --> GR["Guardrails + Routing"];
+  GR --> RET["Retriever (FAISS)"];
+  RET --> CTX["Context Builder"];
+  CTX --> LLM["LLM (HF Inference)"];
+  LLM --> OUT["JSON: Answer + Evidence + Disclaimer"];
+  OUT --> API;
+  API --> UI["React UI"];
 ```
 
 ### CI/CD Pipeline
 
 ```mermaid
 flowchart LR
-  GH[GitHub Repo] --> JK[Jenkins Pipeline (DinD)]
-  JK --> DB[Docker Build]
-  DB --> TV[Trivy Scan]
-  TV --> ECR[AWS ECR Push]
-  ECR --> AR[AWS App Runner Deploy]
+  GH["GitHub Repo"] --> JK["Jenkins Pipeline (DinD)"];
+  JK --> DB["Docker Build"];
+  DB --> TV["Trivy Scan"];
+  TV --> ECR["AWS ECR Push"];
+  ECR --> AR["AWS App Runner Deploy"];
 ```
 
 ### Optional Voice Flow
 
 ```mermaid
 flowchart LR
-  UI[React UI] -->|Audio Upload| STT[/api/stt (faster-whisper)/]
-  STT --> TXT[Transcript]
-  TXT --> API[/api/chat or /api/chat/stream/]
-  API --> UI
-  UI -->|Text| TTS[/api/tts (edge-tts)/]
-  TTS -->|Audio Bytes| UI
+  UI["React UI"] --> UP["Audio Upload"];
+  UP --> STT["/api/stt (faster-whisper)"];
+  STT --> TXT["Transcript"];
+  TXT --> CHAT["/api/chat or /api/chat/stream"];
+  CHAT --> UI;
+  UI --> TTS["/api/tts (edge-tts)"];
+  TTS --> AUD["Audio Bytes"];
+  AUD --> UI;
 ```
 
 ## Tech Stack
@@ -351,10 +354,6 @@ docker run --rm \
 ## Live Demo
 
 Add your App Runner service URL here.
-
-## License
-
-MIT (or your preferred license)
 
 ## Disclaimer
 
