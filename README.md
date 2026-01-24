@@ -1,66 +1,78 @@
-# Medical RAG Chatbot — LLMOps CI/CD (Jenkins + Trivy + AWS ECR + App Runner)
+# Medical RAG Chatbot - LLMOps CI/CD (Jenkins, Trivy, AWS ECR, App Runner)
 
-Production-style **Retrieval-Augmented Generation (RAG)** chatbot for medical PDFs with an end-to-end **CI/CD** pipeline: Docker build -> Trivy scan -> ECR push -> AWS App Runner deploy via Jenkins (DinD).
+Production-style Retrieval-Augmented Generation (RAG) chatbot for medical PDFs with an end-to-end CI/CD pipeline: Docker build -> Trivy scan -> ECR push -> App Runner deploy via Jenkins (Docker-in-Docker). Optional voice support (STT/TTS) is available via faster-whisper and Edge TTS.
 
-## Highlights
-- Grounded RAG workflow with FAISS retrieval over medical PDFs.
-- Containerized build with automated security scanning (Trivy).
-- Deployment to AWS App Runner driven by Jenkins DinD.
-- React UI backed by a Flask API.
+## Features
+
+- RAG over local medical PDFs with FAISS retrieval.
+- Router supports pdf, web (optional), and hybrid paths.
+- Evidence-aware responses with disclaimers for safety.
+- Streaming endpoint for low-latency responses.
+- Optional voice layer (STT/TTS) for audio input and spoken output.
+- CI/CD pipeline with security scanning and automated deploy.
 
 ## Demo
 
 ![Demo](assets/demo.gif)
 
-Full demo video: [Demo.mp4](Demo.mp4)
+Full demo video: add link
 
-## Architecture & Flow
+## Architecture
 
-### RAG flow
+### RAG + Serving
 
 ```mermaid
 flowchart LR
-  A[PDFs] --> B[Load]
-  B --> C[Chunk]
-  C --> D[Embeddings]
-  D --> E[(FAISS Index)]
-
-  Q[User Query] --> R[Retrieve Top K]
-  E --> R
-
-  R --> P[Prompt + Context]
-  P --> L[LLM]
-  L --> O[Answer]
+  U[User Question] --> API[Flask API]
+  API --> GR[Guardrails + Routing]
+  GR -->|pdf / hybrid| RET[Retriever (FAISS)]
+  RET --> CTX[Context Builder]
+  CTX --> LLM[LLM (HF Inference)]
+  LLM --> OUT[JSON Answer + Evidence + Disclaimer]
+  OUT --> API --> UI[React UI]
 ```
 
-### CI/CD flow
+### CI/CD Pipeline
 
 ```mermaid
 flowchart LR
-  GH[GitHub] --> JK[Jenkins DinD]
+  GH[GitHub Repo] --> JK[Jenkins Pipeline (DinD)]
   JK --> DB[Docker Build]
   DB --> TV[Trivy Scan]
-  TV --> ECR[AWS ECR]
-  ECR --> AR[AWS App Runner]
+  TV --> ECR[AWS ECR Push]
+  ECR --> AR[AWS App Runner Deploy]
+```
+
+### Optional Voice Flow
+
+```mermaid
+flowchart LR
+  UI[React UI] -->|Audio Upload| STT[/api/stt (faster-whisper)/]
+  STT --> TXT[Transcript]
+  TXT --> API[/api/chat or /api/chat/stream/]
+  API --> UI
+  UI -->|Text| TTS[/api/tts (edge-tts)/]
+  TTS -->|Audio Bytes| UI
 ```
 
 ## Tech Stack
 
-- **Backend:** Python, Flask
-- **RAG:** LangChain + FAISS
-- **Embeddings:** SentenceTransformers
-- **LLM:** Hugging Face Inference Providers (configurable model)
-- **Frontend:** React + Tailwind
-- **Security:** Trivy
-- **CI/CD:** Jenkins Pipeline (True DinD)
-- **Registry:** AWS ECR
-- **Deployment:** AWS App Runner
+- Backend: Python, Flask
+- RAG: LangChain + FAISS
+- Embeddings: sentence-transformers
+- LLM: Hugging Face Inference Providers (model configurable)
+- Frontend: React + Tailwind
+- Security: Trivy
+- CI/CD: Jenkins Pipeline (Docker-in-Docker)
+- Registry: AWS ECR
+- Deployment: AWS App Runner
+- Voice (optional): faster-whisper (STT) + edge-tts (TTS)
 
 ## Repository Structure
 
-```text
+```
 .
-├── app/                      # backend application code
+├── app/                      # Flask backend + RAG components
 ├── data/                     # PDFs / knowledge base
 ├── vectorstore/db_faiss/     # FAISS index (generated)
 ├── src/                      # React frontend
@@ -68,18 +80,29 @@ flowchart LR
 ├── custom_jenkins/           # Jenkins DinD Dockerfile
 │   └── Dockerfile
 ├── Jenkinsfile               # CI/CD pipeline
-├── Dockerfile                # app Dockerfile
+├── Dockerfile                # App Dockerfile
 └── README.md
 ```
 
-## Local Setup
+## Quick Start (Local)
+
+### Prerequisites
+
+- Python and pip
+- Node.js and npm
+- Hugging Face token
+- Optional: Docker for containerized runs
+
+### Setup
+
+1) Clone
 
 ```bash
 git clone https://github.com/data-guru0/LLMOPS-2-TESTING-MEDICAL.git
 cd LLMOPS-2-TESTING-MEDICAL
 ```
 
-Create venv + install:
+2) Create venv and install
 
 ```bash
 python -m venv venv
@@ -89,81 +112,127 @@ source venv/bin/activate     # mac/linux
 pip install -e .
 ```
 
-### Backend
+3) Create `.env` in the repo root (no spaces around `=`)
 
 ```bash
-export HF_TOKEN="your_huggingface_token"
+HF_TOKEN=hf_your_token_here
+HUGGINGFACE_REPO_ID=Qwen/Qwen2.5-7B-Instruct
+DEFAULT_ROUTE=hybrid
 
-# Build the vectorstore from your PDFs
+REACT_APP_API_URL=http://localhost:5001
+
+# Optional (web search routing)
+TAVILY_API_KEY=tvly_your_key_here
+
+# Optional (reranker)
+CROSS_ENCODER_MODEL=cross-encoder/ms-marco-MiniLM-L6-v2
+
+# Optional (voice)
+EDGE_TTS_VOICE=en-IN-PrabhatNeural
+```
+
+If you accidentally committed keys earlier, rotate them.
+
+4) Build vector store (PDF ingestion)
+
+Put PDFs in `data/`, then run:
+
+```bash
 python app/components/data_loader.py
+```
 
-# Run the backend (defaults to 5001)
+5) Run backend
+
+```bash
 python app/application.py
 ```
 
-Backend runs at `http://localhost:5001`.
+Backend: http://localhost:5001
 
-### Frontend
+6) Run frontend
 
 ```bash
 npm install
-```
-
-Set `REACT_APP_API_URL` in `.env` (example in `.env.example`):
-
-```env
-REACT_APP_API_URL=http://localhost:5001
-```
-
-Start the UI:
-
-```bash
 npm start
 ```
 
-Frontend runs at `http://localhost:3000`.
+Frontend: http://localhost:3000
 
-## Configuration
+## API Endpoints
 
-Key environment variables:
+### Chat
 
-- `HF_TOKEN`: Hugging Face token (required)
-- `HUGGINGFACE_REPO_ID`: model id (default in `app/config/config.py`)
-- `HF_PROVIDER`: inference provider (default: `hf-inference`)
-- `HF_MAX_TOKENS`, `HF_TEMPERATURE`, `HF_TOP_P`, `HF_TIMEOUT`: LLM settings
-- `FLASK_SECRET_KEY`: session secret (set in production)
-- `REACT_APP_API_URL`: backend URL for the frontend
+- POST `/api/chat`
 
-## Docker
+```json
+{ "question": "What is hypertension?", "route": "pdf" }
+```
+
+- POST `/api/chat/stream` (streams plain text chunks)
+
+Routes allowed:
+
+- pdf: only PDFs
+- web: only web (if enabled)
+- hybrid: router decides or combines
+
+### Voice (Optional)
+
+- POST `/api/stt` (multipart form-data)
+  - key: `audio`
+  - returns: `{ "text": "...", "language": "...", "duration": ... }`
+- POST `/api/tts`
+
+```json
+{
+  "text": "Hello, how can I help?",
+  "voice": "en-IN-PrabhatNeural",
+  "rate": "+10%",
+  "pitch": "+10Hz",
+  "output_format": "audio-24khz-48kbitrate-mono-mp3"
+}
+```
+
+Returns: audio bytes
+
+- GET `/api/voice/voices` (list voices for dropdown)
+
+## Docker (App)
 
 ```bash
 docker build -t medical-rag .
+```
 
-# Build the vectorstore inside a container
+Build the vectorstore inside a container:
+
+```bash
 docker run --rm -it \
   -e HF_TOKEN="your_huggingface_token" \
   -v "$(pwd)/data:/app/data" \
   -v "$(pwd)/vectorstore:/app/vectorstore" \
   medical-rag \
   python app/components/data_loader.py
+```
 
-# Run the app
+Run the app:
+
+```bash
 docker run --rm -p 5001:5001 \
   -e HF_TOKEN="your_huggingface_token" \
   -v "$(pwd)/vectorstore:/app/vectorstore" \
   medical-rag
 ```
 
-## Jenkins Setup (True Docker-in-Docker)
+## Jenkins Setup (Docker-in-Docker)
 
-### 1) Build Jenkins DinD image
+1) Build Jenkins DinD image
 
 ```bash
 cd custom_jenkins
 docker build -t jenkins-dind .
 ```
 
-### 2) Run Jenkins DinD container
+2) Run Jenkins DinD container
 
 ```bash
 docker run -d \
@@ -176,17 +245,17 @@ docker run -d \
   jenkins-dind
 ```
 
-### 3) Get admin password
+3) Get admin password
 
 ```bash
 docker exec -it jenkins-dind cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 
-Open Jenkins: `http://localhost:8080`.
+Open Jenkins: http://localhost:8080
 
-## Install Tools in Jenkins Container (if missing)
+### Install Tools in Jenkins Container (if missing)
 
-### Install Trivy (ARM64-safe)
+Trivy (ARM64-safe)
 
 ```bash
 docker exec -u root -it jenkins-dind bash
@@ -199,7 +268,7 @@ trivy --version
 exit
 ```
 
-### Install AWS CLI (ARM64-safe)
+AWS CLI (ARM64-safe)
 
 ```bash
 docker exec -u root -it jenkins-dind bash
@@ -215,55 +284,57 @@ exit
 
 ## Jenkins + GitHub Integration
 
-1) Create a GitHub token (classic) with scopes: `repo`, `admin:repo_hook`
-2) Add to Jenkins Credentials:
-   - Jenkins → Manage Jenkins → Credentials → (Global) → Add Credentials
+1) Create a GitHub token (classic) with scopes: repo, admin:repo_hook
+2) Add to Jenkins credentials:
+   - Jenkins -> Manage Jenkins -> Credentials -> (Global) -> Add Credentials
    - Kind: Username with password
    - Username: your GitHub username
    - Password: GitHub token
-   - ID: `github-token`
+   - ID: github-token
 
 ## AWS Setup (ECR + App Runner)
 
-### IAM User permissions
+### IAM User Permissions
 
-Attach these policies to your Jenkins IAM user:
+Attach these to your Jenkins IAM user:
 
-- `AmazonEC2ContainerRegistryFullAccess`
-- `AWSAppRunnerFullAccess`
+- AmazonEC2ContainerRegistryFullAccess
+- AWSAppRunnerFullAccess
 
 ### Add AWS creds to Jenkins
 
-- Jenkins → Credentials → Add
+- Jenkins -> Credentials -> Add
 - Kind: AWS Credentials
-- ID: `aws-token` (matches your Jenkinsfile)
+- ID: aws-token (must match your Jenkinsfile)
 
 ## CI/CD Pipeline (Jenkinsfile)
 
-This repo contains a `Jenkinsfile` that performs:
+This repo contains a Jenkinsfile that typically performs:
 
-- Checkout source from GitHub
+- Checkout source
 - Docker build
-- Trivy scan (artifact: `trivy-report.json`)
+- Trivy scan (artifact: trivy-report.json)
 - Push image to AWS ECR
 - Trigger AWS App Runner deployment
 
-See `Jenkinsfile` for the full pipeline definition.
-
-## Security Notes
-
-- Trivy typically uses `--severity HIGH,CRITICAL`.
-- If your pipeline uses `|| true`, the build does **not** fail on findings.
-
-To fail the pipeline on vulnerabilities:
-
-```bash
-trivy image --severity HIGH,CRITICAL --exit-code 1 ...
-```
+See `Jenkinsfile` for the complete pipeline.
 
 ## Troubleshooting
 
-### Jenkins container restart loop: volume permission issue
+### Vector store rebuild
+
+To recreate FAISS from scratch:
+
+```bash
+rm -rf vectorstore/db_faiss
+python app/components/data_loader.py
+```
+
+Warning: "Normalizing L2 is not applicable for COSINE"
+
+This warning is usually safe. It appears when FAISS settings and normalization mismatch. If results look bad, use a consistent metric (cosine requires normalized vectors).
+
+### Jenkins restart loop (volume permission issue)
 
 Fix once:
 
@@ -277,13 +348,14 @@ docker run --rm \
   bash -lc "chown -R 1000:1000 /var/jenkins_home && ls -ld /var/jenkins_home"
 ```
 
-### Docker daemon not reachable inside Jenkins
+## Live Demo
 
-```bash
-docker exec -it jenkins-dind docker info
-docker exec -it jenkins-dind docker run --rm hello-world
-```
+Add your App Runner service URL here.
+
+## License
+
+MIT (or your preferred license)
 
 ## Disclaimer
 
-This project is for information retrieval and demo purposes only. It does not provide medical advice; consult a qualified professional for medical decisions.
+This project is for information retrieval and demo purposes only. It does not provide medical advice. Always consult a qualified professional for medical decisions.

@@ -1,10 +1,30 @@
-langchain
-langchain_community
-langchain_huggingface
-sentence-transformers
-faiss-cpu
-pypdf
-huggingface_hub
-flask
-flask-cors
-python-dotenv
+# LangChain (v0.3 monorepo-style; keeps `langchain.chains` imports working)
+langchain==0.3.27
+langchain-community==0.3.31
+langchain-core==0.3.83
+langchain-huggingface==0.3.1
+langchain-text-splitters==0.3.11
+
+flask>=3.0.0,<4
+flask-cors>=4.0.0,<5
+python-dotenv>=1.0.0,<2
+
+# PDF ingestion
+pypdf>=4.3.0,<5
+
+# Vector search
+faiss-cpu>=1.8.0,<2
+
+# Embeddings + reranking
+sentence-transformers>=3.0.0,<4
+torch>=2.2.0
+
+# LLM inference
+huggingface_hub>=0.24.0,<1
+
+# Web fallback (optional)
+tavily-python>=0.5.0,<1
+
+# Speech (server-side STT/TTS)
+faster-whisper>=1.0.0,<2
+edge-tts>=6.1.10,<7

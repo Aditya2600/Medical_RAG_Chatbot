@@ -9,7 +9,10 @@ def get_embedding_model():
     try:
         logger.info("Initializing our Huggingface embedding model")
         
-        model = HuggingFaceEmbeddings(model_name = "sentence-transformers/all-MiniLM-L6-v2")
+        model = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+            encode_kwargs={"normalize_embeddings": True},
+        )
         
         logger.info("Huggingface embedding model loaded succesfully....")
         

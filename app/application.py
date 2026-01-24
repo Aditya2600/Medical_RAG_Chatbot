@@ -14,11 +14,46 @@ from dotenv import load_dotenv
 import os
 import time
 
-from app.components.retriever import create_qa_chain
+from app.common.logger import get_logger
+
+from app.components.guardrails import (
+    build_fallback_payload,
+    generate_guardrailed_response,
+    serialize_payload,
+)
+from app.components.voice import (
+    synthesize_speech,
+    transcribe_audio,
+    tts_mime_type,
+    list_voices,
+)
+from app.config.config import (
+    DEFAULT_ROUTE,
+    EDGE_TTS_OUTPUT_FORMAT,
+    EDGE_TTS_PITCH,
+    EDGE_TTS_RATE,
+    EDGE_TTS_VOICE,
+)
 
 load_dotenv()
 
 app = Flask(__name__)
+logger = get_logger(__name__)
+
+ALLOWED_ROUTES = {"pdf", "web", "hybrid"}
+
+
+def normalize_route(route: str) -> str:
+    normalized = (route or DEFAULT_ROUTE).strip().lower()
+    return normalized if normalized in ALLOWED_ROUTES else DEFAULT_ROUTE
+
+
+def env_bool(key: str, default: bool = False) -> bool:
+    val = os.environ.get(key)
+    if val is None:
+        return default
+    return val.strip().lower() in {"1", "true", "yes", "y", "on"}
+
 
 # Allow local React dev server by default; override with CORS_ORIGINS
 cors_origins = os.environ.get(
@@ -33,17 +68,6 @@ CORS(
 # NOTE: Use a strong secret in production (set FLASK_SECRET_KEY in env)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-key")
 
-# Build QA chain once at startup
-qa_chain = None
-
-
-def get_qa_chain():
-    """Lazy init to avoid startup crash masking template/debug issues."""
-    global qa_chain
-    if qa_chain is None:
-        qa_chain = create_qa_chain()
-    return qa_chain
-
 
 def get_session_messages():
     if "messages" not in session:
@@ -51,37 +75,27 @@ def get_session_messages():
     return session["messages"]
 
 
-def generate_answer(question: str) -> str:
-    """Generate an answer using the LCEL Runnable chain.
-
-    IMPORTANT:
-    - Your retriever returns an LCEL RunnableSequence.
-    - RunnableSequence is NOT callable; it must be invoked via `.invoke()`.
-
-    Expected output shape from our chain:
-        {"answer": "..."}
-    """
+def generate_answer(question: str, route: str = DEFAULT_ROUTE) -> str:
+    """Generate a JSON string response using guardrails + retrieval."""
     try:
-        chain = get_qa_chain()
-        result = chain.invoke({"input": question})
-
-        if isinstance(result, dict):
-            if "answer" in result and isinstance(result.get("answer"), str):
-                return result["answer"]
-            # If output shape changes in future, still return something usable
-            if "result" in result and isinstance(result.get("result"), str):
-                return result["result"]
-            if "output_text" in result and isinstance(result.get("output_text"), str):
-                return result["output_text"]
-            return str(result)
-
-        return str(result)
-
-    except Exception as e:
-        return f"Sorry, I couldn't process that right now. Error: {e}"
+        return generate_guardrailed_response(question, route=route)
+    except Exception:
+        logger.exception("generate_answer failed (route=%s)", route)
+        return serialize_payload(build_fallback_payload())
 
 
-def stream_chunks(text: str, chunk_size: int = 28, delay_s: float = 0.02):
+def stream_chunks(text: str, chunk_size: int = None, delay_s: float = None):
+    if chunk_size is None:
+        try:
+            chunk_size = int(os.environ.get("STREAM_CHUNK_SIZE", "28"))
+        except ValueError:
+            chunk_size = 28
+    if delay_s is None:
+        try:
+            delay_s = float(os.environ.get("STREAM_DELAY_S", "0"))
+        except ValueError:
+            delay_s = 0.0
+
     for index in range(0, len(text), chunk_size):
         yield text[index : index + chunk_size]
         if delay_s:
@@ -90,25 +104,23 @@ def stream_chunks(text: str, chunk_size: int = 28, delay_s: float = 0.02):
 
 @app.route("/", methods=["GET"])
 def home():
-    """Landing page."""
     messages = get_session_messages()
     return render_template("index.html", messages=messages)
 
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    """Handle user question and return chatbot response."""
     question = (request.form.get("question") or request.form.get("prompt") or "").strip()
+    route = normalize_route(request.form.get("route") or DEFAULT_ROUTE)
     messages = get_session_messages()
 
     if not question:
         return redirect(url_for("home"))
 
-    # Add user message
     messages.append({"role": "user", "content": question})
-    answer = generate_answer(question)
+    answer = generate_answer(question, route=route)
 
-    # Add assistant message
+    # Stored as JSON string (your guardrails returns JSON text)
     messages.append({"role": "assistant", "content": answer})
     session.modified = True
 
@@ -117,22 +129,21 @@ def chat():
 
 @app.route("/api/messages", methods=["GET"])
 def api_messages():
-    """Return chat history for the React frontend."""
     return jsonify({"messages": get_session_messages()})
 
 
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
-    """Handle user question and return updated messages as JSON."""
     data = request.get_json(silent=True) or {}
     question = (data.get("question") or "").strip()
+    route = normalize_route(data.get("route") or DEFAULT_ROUTE)
 
     if not question:
         return jsonify({"error": "Question is required"}), 400
 
     messages = get_session_messages()
     messages.append({"role": "user", "content": question})
-    answer = generate_answer(question)
+    answer = generate_answer(question, route=route)
     messages.append({"role": "assistant", "content": answer})
     session.modified = True
 
@@ -141,16 +152,16 @@ def api_chat():
 
 @app.route("/api/chat/stream", methods=["POST"])
 def api_chat_stream():
-    """Stream assistant response as plain text chunks."""
     data = request.get_json(silent=True) or {}
     question = (data.get("question") or "").strip()
+    route = normalize_route(data.get("route") or DEFAULT_ROUTE)
 
     if not question:
         return jsonify({"error": "Question is required"}), 400
 
     messages = get_session_messages()
     messages.append({"role": "user", "content": question})
-    answer = generate_answer(question)
+    answer = generate_answer(question, route=route)
     messages.append({"role": "assistant", "content": answer})
     session.modified = True
 
@@ -163,20 +174,79 @@ def api_chat_stream():
     return response
 
 
+@app.route("/api/stt", methods=["POST"])
+def api_stt():
+    audio = request.files.get("audio")
+    if audio is None or not audio.filename:
+        return jsonify({"error": "Audio file is required"}), 400
+
+    try:
+        text, meta = transcribe_audio(audio)
+        payload = {"text": text}
+        payload.update(meta)
+        return jsonify(payload)
+    except Exception as e:
+        return jsonify({"error": f"STT failed: {e}"}), 500
+
+
+@app.route("/api/voice/voices", methods=["GET"])
+def api_voice_voices():
+    """Frontend can call this to show voice dropdown."""
+    try:
+        voices = list_voices()
+        lite = []
+        for v in voices or []:
+            lite.append(
+                {
+                    "name": v.get("Name"),
+                    "shortName": v.get("ShortName"),
+                    "locale": v.get("Locale"),
+                    "gender": v.get("Gender"),
+                }
+            )
+        return jsonify({"voices": lite})
+    except Exception as e:
+        return jsonify({"error": f"Failed to list voices: {e}"}), 500
+
+
+@app.route("/api/tts", methods=["POST"])
+def api_tts():
+    data = request.get_json(silent=True) or {}
+    text = (data.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": "Text is required"}), 400
+
+    voice = data.get("voice") or EDGE_TTS_VOICE
+    rate = data.get("rate") or EDGE_TTS_RATE
+    pitch = data.get("pitch") or EDGE_TTS_PITCH
+    # accept either key from frontend: output_format OR format
+    output_format = data.get("output_format") or data.get("format") or EDGE_TTS_OUTPUT_FORMAT
+
+    try:
+        audio_bytes = synthesize_speech(
+            text, voice=voice, rate=rate, pitch=pitch, output_format=output_format
+        )
+    except Exception as e:
+        return jsonify({"error": f"TTS failed: {e}"}), 500
+
+    response = Response(audio_bytes, mimetype=tts_mime_type(output_format))
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
 @app.route("/api/clear", methods=["POST"])
 def api_clear():
-    """Clear chat history for the React frontend."""
     session.pop("messages", None)
     return jsonify({"messages": []})
 
 
 @app.route("/clear", methods=["POST", "GET"])
 def clear_chat():
-    """Clear chat history."""
     session.pop("messages", None)
     return redirect(url_for("home"))
 
 
 if __name__ == "__main__":
-    # Use 0.0.0.0 for docker deployment
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5001)), debug=True)
+    debug = env_bool("FLASK_DEBUG", default=False)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5001)), debug=debug)

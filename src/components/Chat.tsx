@@ -8,11 +8,18 @@ import {
   Sparkles,
   Stethoscope,
   Sun,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { useChat } from '../hooks/useChat';
 import { Message } from './Message';
 import { ChatInput } from './ChatInput';
 import { TypingIndicator } from './TypingIndicator';
+import {
+  isSpeechSynthesisSupported,
+  speakText,
+  stopSpeaking,
+} from '../utils/voice';
 
 const promptSuggestions = [
   'Summarize the latest guidance for hypertension management.',
@@ -36,6 +43,7 @@ const getInitialTheme = () => {
 export const Chat: React.FC = () => {
   const { messages, isLoading, error, sendMessage, clearMessages } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lastSpokenIdRef = useRef<string | null>(null);
   const lastMessage = messages[messages.length - 1];
   const showTyping =
     isLoading &&
@@ -43,6 +51,8 @@ export const Chat: React.FC = () => {
     lastMessage?.role === 'assistant' &&
     !lastMessage?.content;
   const [isDark, setIsDark] = useState(getInitialTheme);
+  const [autoSpeak, setAutoSpeak] = useState(false);
+  const canSpeak = isSpeechSynthesisSupported();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -60,6 +70,21 @@ export const Chat: React.FC = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    if (!autoSpeak) {
+      stopSpeaking();
+      return;
+    }
+    if (!canSpeak || isLoading || !lastMessage) return;
+    if (lastMessage.role !== 'assistant' || !lastMessage.content.trim()) return;
+    if (lastMessage.id === lastSpokenIdRef.current) return;
+
+    const spoken = speakText(lastMessage.content);
+    if (spoken) {
+      lastSpokenIdRef.current = lastMessage.id;
+    }
+  }, [autoSpeak, canSpeak, isLoading, lastMessage]);
 
   const handleSuggestion = (prompt: string) => {
     if (isLoading) return;
@@ -172,6 +197,28 @@ export const Chat: React.FC = () => {
                 />
                 {isLoading ? 'Synthesizing answer' : 'Ready to chat'}
               </div>
+              {canSpeak && (
+                <div className="flex items-center gap-2">
+                  <span className="hidden text-[10px] uppercase tracking-[0.24em] lg:inline">
+                    Voice
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAutoSpeak((prev) => !prev)}
+                    className={`voice-toggle ${autoSpeak ? 'voice-toggle-active' : ''}`}
+                    aria-pressed={autoSpeak}
+                    aria-label={
+                      autoSpeak ? 'Disable voice responses' : 'Enable voice responses'
+                    }
+                  >
+                    {autoSpeak ? (
+                      <Volume2 className="h-3 w-3" />
+                    ) : (
+                      <VolumeX className="h-3 w-3" />
+                    )}
+                  </button>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <span className="hidden text-[10px] uppercase tracking-[0.24em] lg:inline">
                   Dark mode

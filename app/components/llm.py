@@ -1,50 +1,107 @@
-import os
+from __future__ import annotations
+
+from typing import Optional
 from huggingface_hub import InferenceClient
+from huggingface_hub.errors import HfHubHTTPError
+
 from langchain_core.runnables import RunnableLambda
 
+from app.config.config import (
+    HF_PROVIDER,
+    HF_MAX_TOKENS,
+    HF_TEMPERATURE,
+    HF_TOP_P,
+    HF_TIMEOUT,
+)
 from app.common.logger import get_logger
 from app.common.custom_exception import CustomException
-from app.config.config import HF_TOKEN, HUGGINGFACE_REPO_ID, HF_PROVIDER
 
 logger = get_logger(__name__)
 
 
-def _to_text(x) -> str:
-    """Convert LangChain PromptValue (StringPromptValue) -> plain text."""
-    if isinstance(x, str):
-        return x
-    if hasattr(x, "to_string") and callable(getattr(x, "to_string")):
-        return x.to_string()
-    return str(x)
+def _to_float(x, default: float) -> float:
+    try:
+        return float(x)
+    except Exception:
+        return default
 
 
-def load_llm(huggingface_repo_id: str = None, hf_token: str = None):
+def _to_int(x, default: int) -> int:
+    try:
+        return int(x)
+    except Exception:
+        return default
+
+
+def load_llm(huggingface_repo_id: str, hf_token: Optional[str]):
     """
-    Returns a LangChain-compatible Runnable for LCEL pipelines.
-    Works with HF Inference Providers + Together using chat_completion (conversational).
+    Returns a Runnable that takes a string prompt and returns a string completion.
+
+    Key behavior:
+    - If HF_PROVIDER is empty OR "hf-inference": use direct HF Inference API (no router).
+    - Else: use HF router with provider (e.g., together).
+    - Try chat_completion; if it fails, fallback to text_generation.
     """
     try:
-        model_id = huggingface_repo_id or HUGGINGFACE_REPO_ID
-        token = hf_token or HF_TOKEN
-
-        if not token:
+        if not hf_token:
             raise CustomException("HF token missing. Set HF_TOKEN in .env", None)
 
-        client = InferenceClient(
-            provider=HF_PROVIDER,
-            model=model_id,
-            api_key=token,
-        )
+        provider = (HF_PROVIDER or "").strip()
+        max_tokens = _to_int(HF_MAX_TOKENS, 512)
+        temperature = _to_float(HF_TEMPERATURE, 0.2)
+        top_p = _to_float(HF_TOP_P, 0.9)
+        timeout = _to_int(HF_TIMEOUT, 120)
 
-        def _call_llm(prompt_value) -> str:
-            prompt_text = _to_text(prompt_value)  # ✅ IMPORTANT FIX
-            out = client.chat_completion(
-                messages=[{"role": "user", "content": prompt_text}],
-                max_tokens=512,
+        # IMPORTANT:
+        # - Router mode: provider + model + api_key
+        # - Direct mode: model + token
+        if provider and provider.lower() != "hf-inference":
+            logger.info(f"Loading HF routed client provider={provider} model={huggingface_repo_id}")
+            client = InferenceClient(
+                provider=provider,
+                model=huggingface_repo_id,
+                api_key=hf_token,
+                timeout=timeout,
             )
-            return out.choices[0].message.content
+        else:
+            logger.info(f"Loading HF direct client model={huggingface_repo_id}")
+            client = InferenceClient(
+                model=huggingface_repo_id,
+                token=hf_token,
+                timeout=timeout,
+            )
 
-        logger.info(f"Loaded HF chat LLM via provider={HF_PROVIDER}, model={model_id}")
+        def _call_llm(prompt: object) -> str:
+            prompt_text = str(prompt)
+
+            # 1) Try chat completion
+            try:
+                out = client.chat_completion(
+                    messages=[{"role": "user", "content": prompt_text}],
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                )
+                return out.choices[0].message.content
+            except Exception as e:
+                logger.warning(f"chat_completion failed, falling back to text_generation: {e}")
+
+            # 2) Fallback: text generation (returns str by default)
+            try:
+                gen = client.text_generation(
+                    prompt_text,
+                    max_new_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    do_sample=True,
+                    return_full_text=False,
+                )
+                if isinstance(gen, str):
+                    return gen
+                return getattr(gen, "generated_text", str(gen))
+            except Exception as e2:
+                raise CustomException("HF inference failed (chat_completion + text_generation)", e2)
+
         return RunnableLambda(_call_llm)
 
     except Exception as e:
